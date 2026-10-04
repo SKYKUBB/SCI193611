@@ -1,0 +1,266 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{enumitem}
+\usepackage{bbold}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+
+\begin{document}
+
+% ==============================================================================
+
+\title{\Large{INFO8006: Project 2 - Report}}
+
+\vspace{1cm}
+
+\author{\small{\bf phoomchit samoban - b6735128}}
+
+\maketitle
+
+% ==============================================================================
+
+\section{Bayes filter}
+
+\begin{enumerate}[label=\alph*.,leftmargin=*]
+
+    \item
+    The rusty sensor provides a noisy measurement of the Manhattan distance
+    between Pacman and a ghost.
+
+    Let $X_t=(x,y)$ denote the ghost position at time $t$, and let
+    $d(X_t,P_t)$ denote the Manhattan distance between the ghost and Pacman.
+    The sensor noise is generated from a binomial random variable
+
+    \[
+    K \sim \mathrm{Binomial}(n,p),
+    \]
+
+    where
+
+    \[
+    p=0.5
+    \]
+
+    and
+
+    \[
+    n=
+    \left\lfloor
+    \frac{\text{sensor variance}}{p(1-p)}
+    \right\rfloor.
+    \]
+
+    The observed evidence is therefore
+
+    \[
+    E_t=d(X_t,P_t)+(K-np).
+    \]
+
+    For a possible ghost position $x$, the sensor model is
+
+    \[
+    P(E_t=e\mid X_t=x)
+    =
+    \Pr\left(
+    K=e-d(x,P_t)+np
+    \right).
+    \]
+
+    The probability is zero when the required value of $K$ is outside the
+    valid range from $0$ to $n$.
+
+    \item
+    The transition model describes how a ghost moves from its current
+    position to a legal neighbouring position.
+
+    Let $d$ be the current Manhattan distance between the ghost and Pacman,
+    and let $d'$ be the distance after a possible move. The probability of
+    a legal action is proportional to
+
+    \[
+    w(a)=
+    \begin{cases}
+    \lambda, & d' \geq d,\\
+    1, & d' < d.
+    \end{cases}
+    \]
+
+    After assigning the weights, they are normalized over all legal
+    non-stop actions.
+
+    The parameter $\lambda$ depends on the ghost type:
+
+    \[
+    \lambda=
+    \begin{cases}
+    1, & \text{confused},\\
+    2, & \text{afraid},\\
+    8, & \text{scared}.
+    \end{cases}
+    \]
+
+    Therefore, a confused ghost moves uniformly, while afraid and scared
+    ghosts prefer movements that maintain or increase their distance from
+    Pacman.
+
+\end{enumerate}
+
+% ==============================================================================
+
+\section{Implementation}
+
+\begin{enumerate}[label=\alph*.,leftmargin=*]
+
+    \item
+    The Bayes filter is implemented by maintaining a separate belief
+    distribution for each ghost.
+
+    At each time step, the belief is updated using three steps.
+
+    First, the prediction step applies the transition model:
+
+    \[
+    \overline{Bel}_t(x)
+    =
+    \sum_{x'}
+    P(x\mid x')Bel_{t-1}(x').
+    \]
+
+    Second, the measurement update applies the sensor model:
+
+    \[
+    \widetilde{Bel}_t(x)
+    =
+    P(E_t\mid x)\overline{Bel}_t(x).
+    \]
+
+    Finally, the result is normalized:
+
+    \[
+    Bel_t(x)
+    =
+    \frac{
+    \widetilde{Bel}_t(x)
+    }{
+    \sum_y \widetilde{Bel}_t(y)
+    }.
+    \]
+
+    The current Pacman position is used in the sensor and transition
+    calculations. If a ghost has been eaten, its belief is set to zero.
+    The implementation also handles the case where the updated belief has
+    total probability zero by falling back to a uniform distribution.
+
+\end{enumerate}
+
+% ==============================================================================
+
+\section{Experiment}
+
+\begin{enumerate}[label=\alph*.,leftmargin=*]
+
+    \item
+    We use entropy as a measure of uncertainty in the belief distribution:
+
+    \[
+    H(B)
+    =
+    -\sum_x B(x)\log_2 B(x).
+    \]
+
+    A lower entropy means that the probability is concentrated on fewer
+    positions, while a higher entropy represents greater uncertainty.
+
+    \item
+    To measure the quality of the belief state, we use the expected
+    Manhattan distance between the predicted ghost position and the true
+    ghost position:
+
+    \[
+    Q(B)
+    =
+    \sum_x
+    B(x)
+    d_{\mathrm{Manhattan}}(x,x_{\mathrm{true}}).
+    \]
+
+    Lower values indicate that the belief distribution is more concentrated
+    around the true ghost position.
+
+    \item
+    The implementation was tested on the two required layouts using one
+    hidden ghost and each of the three ghost types.
+
+    \begin{center}
+    \begin{tabular}{lccc}
+    \hline
+    Layout & Ghost type & Score & Result \\
+    \hline
+    large\_filter & confused & 698 & Win \\
+    large\_filter & afraid & 652 & Win \\
+    large\_filter & scared & 518 & Win \\
+    large\_filter\_walls & confused & 698 & Win \\
+    large\_filter\_walls & afraid & 645 & Win \\
+    large\_filter\_walls & scared & 659 & Win \\
+    \hline
+    \end{tabular}
+    \end{center}
+
+    All six tests completed successfully without the Pacman agent losing
+    the game.
+
+    The measured computation times were approximately 0.012 seconds to
+    1.69 seconds for the tested cases.
+
+    These results show that the implementation can successfully track hidden
+    ghosts in both layouts for confused, afraid, and scared ghost behaviour.
+
+    \item
+    The transition parameter controls how strongly the ghost prefers actions
+    that maintain or increase its distance from Pacman.
+
+    When the parameter is larger, actions that increase or maintain the
+    distance receive a larger probability compared with actions that reduce
+    the distance. Therefore, increasing the transition parameter produces
+    stronger fleeing behaviour.
+
+    \item
+    Sensor variance determines the amount of noise in the distance
+    observation. A smaller sensor variance produces more accurate evidence,
+    allowing the belief distribution to become more concentrated around
+    likely ghost positions.
+
+    A larger sensor variance produces noisier evidence and therefore causes
+    greater uncertainty in the belief distribution. Consequently, entropy
+    is expected to increase as the sensor variance increases, while belief
+    quality is expected to decrease.
+
+    \item
+    The Pacman controller uses the current Pacman position, legal actions,
+    and the belief distributions produced by the Bayes filter.
+
+    The belief distributions of ghosts that have not been eaten are combined
+    into a risk map. The most likely ghost position is then used as a target.
+    The controller evaluates legal Pacman actions and avoids positions with
+    sufficiently high ghost probability whenever possible.
+
+    When a safe path is available, Pacman moves toward the estimated ghost
+    position. If all possible moves are considered unsafe, the controller
+    uses a fallback strategy and selects the action with the lowest estimated
+    ghost risk.
+
+    \item \textbf{Leave empty.}
+
+\end{enumerate}
+
+% ==============================================================================
+
+\end{document}
